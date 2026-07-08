@@ -62,7 +62,7 @@
 \begin{abstract}
 This document lays out both the attack principle and the challenge background as groundwork for further writing, in two parts. \textbf{Part~I (General Principles)} explains \textbf{\emph{how} Shor's algorithm step by step breaks the
 elliptic-curve discrete logarithm (ECDLP) on secp256k1}: from the problem reduction, the algorithm's steps, and the circuit framework, to the step-by-step evolution of the quantum state and the recovery of the private key after measurement. \textbf{Part~II (Implementation)} maps this
-general theory onto the actual secp256k1 point-add challenge\footnote{Challenge site: \url{https://www.ecdsa.fail/}.}: which part of it the challenge actually implements, what scoring and verification rules it obeys, why almost the entire cost of the attack concentrates on the \textbf{elliptic-curve point addition} and the optimization focus in turn falls on the \textbf{modular inverse (GCD)} inside it, and which file and function each section lands in.
+general theory onto the actual secp256k1 point-add challenge\footnote{Challenge site: \url{https://www.ecdsa.fail/}.}: which part of it the challenge actually implements, what scoring and verification rules it obeys, why almost the entire cost of the attack concentrates on the \textbf{elliptic-curve point addition} and the optimization focus in turn falls \emph{chiefly} on the \textbf{modular inverse (GCD)} inside it (with the surrounding field arithmetic a secondary but still live source of gains), and which file and function each section lands in.
 To understand "why/how Shor breaks ECDLP," start with \textbf{Part~I} (\S1--\S7); to quickly align on "what this challenge is optimizing and what constraints it has,"
 read \textbf{Part~II} (\S8--\S11) directly. The two parts are mutually independent and can be used as needed.
 \end{abstract}
@@ -699,11 +699,11 @@ And within this space--time volume to be minimized, \emph{which part} has the mo
 
 The previous section explained \emph{what to press}---the space--time volume $\text{Toffoli}\times\text{qubit}$; this section explains \emph{where to press}. The answer is highly
 concentrated: the \textbf{modular inverse} inside point addition, i.e.\ the step computed by binary GCD / Kaliski (\secref{ssec:inv}). One might say
-\textbf{the optimization history of this circuit is essentially the optimization history of the modular inverse (GCD)}. There are four reasons, and they compound:
+\textbf{much of the optimization history of this circuit has been the optimization history of the modular inverse (GCD)}---though, as noted below, the surrounding field arithmetic still yields wins too. There are four reasons the GCD dominates, and they compound:
 
 \paragraph{(1) It is the only iterative big-cost component in point addition.}
-In one point addition (\eqref{eq:padd}), addition / subtraction / multiplication / squaring are all \emph{branch-free, single-pass} circuits, and the adder (Gidney-style) and
-schoolbook / Karatsuba multiplication are already optimized near their lower bounds, with fixed structure. Only the modular inverse has \emph{no} single-pass algorithm; it can only iterate GCD for
+In one point addition (\eqref{eq:padd}), addition / subtraction / multiplication / squaring are all \emph{branch-free, single-pass} circuits with fixed structure, and the adder (Gidney-style) and
+schoolbook / Karatsuba multiplication are already heavily optimized (though \emph{not} provably minimal---the field arithmetic still yields the occasional win, see the end of the section). Only the modular inverse has \emph{no} single-pass algorithm; it can only iterate GCD for
 $\Theta(n)$ (about $256$--$512$) rounds, each round a compare $+$ conditional subtract $+$ shift. One multiplication is one pass, GCD is $n$ passes---so
 \textbf{the Toffolis of a single point addition come mainly from the GCD loop body}.
 
@@ -721,14 +721,13 @@ The scratch produced by the modular inverse must be uncomputed to zero (the seco
 and the modular inverse is called once per point addition, and point addition is called $\Theta(n)$ times by double-and-add (\eqref{eq:dbladd}), so any constant
 factor pressed down here \textbf{multiplies by several hundred along the whole algorithm}. Savings on other components are additive; savings on the GCD are multiplicative.
 
-\paragraph{(4) It is the only component with algorithmic freedom left.}
-Since the adder / multiplication / squaring are all structurally fixed and hugging their lower bounds, the place in one point addition where real trade-offs remain---\emph{which modular-inverse
-algorithm to choose and how to organize its iterations}---is almost entirely concentrated in the GCD. Addition and multiplication have little optimization room left, whereas the modular inverse is still
-an open design problem. That is, "the space still to be pressed down" objectively lies in the modular inverse; focusing on it is not a preference but the optimal leverage point dictated by the circuit structure.
+\paragraph{(4) It has the most algorithmic freedom left.}
+The adder / multiplication / squaring are structurally fixed single-pass circuits, already close to their practical limits---so the place in one point addition where the \emph{biggest} trade-offs remain---\emph{which modular-inverse
+algorithm to choose and how to organize its iterations}---is concentrated in the GCD, which is still an open design problem. This does not mean the field arithmetic is frozen: it is heavily optimized but not provably minimal, and recent frontier moves have still come from restructuring it---for instance, rewriting the modular \emph{squaring} from an AND-based schoolbook form into a controlled add--subtract (roughly halving the Toffolis per cross product) delivered a few-percent score improvement without touching the GCD. But such wins are the exception; the largest and most reliable leverage is still the modular inverse, and focusing on it is not a preference but what the circuit structure dictates.
 
 \medskip
-In a word: minimizing $\text{Toffoli}\times\text{qubit}$ is nearly equivalent to reducing the cost of the modular inverse---the GCD is the \textbf{cost
-center, the amplifier, and the sole locus of algorithmic freedom} of a single point addition. This is also why, on this circuit, every advance that pushes cost to a new low ultimately traces back to the same place:
+In a word: minimizing $\text{Toffoli}\times\text{qubit}$ is, to first order, reducing the cost of the modular inverse---the GCD is the \textbf{largest cost
+center, the amplifier, and the richest locus of algorithmic freedom} of a single point addition, with the surrounding field arithmetic a secondary lever. This is also why, on this circuit, most advances that push cost to a new low ultimately trace back to the same place:
 lowering the cost of that one modular-inverse step.
 
 % =====================================================================
@@ -744,7 +743,7 @@ $\lambda,x_3,y_3$ (the file header comment is "a-independent secp add formula," 
 \item \textbf{The most expensive part---the modular inverse} --- \code{gcd.rs}, the jump-GCD for $y\mapsto y\cdot x^{-1}\bmod q$ (here $q=p$ is the field prime---the code's variable name for it; not the group order $r$). This is the entity referred to by \secref{ssec:inv}'s
 "most expensive, computed twice" and \secref{sec:gcd}'s "the GCD is the cost center," and the file actually optimized over and over; the schedule /
 comparator / venting / constant-propagation machinery around it is in \code{schedule.rs}, \code{comparator.rs}, \code{venting.rs}, and \code{constprop.rs}.
-\item \textbf{The rest of the arithmetic} (modular multiplication / squaring / addition / comparison, essentially already at the lower bound) --- \code{src/point_add/arith/} and \code{gidney.rs},
+\item \textbf{The rest of the arithmetic} (modular multiplication / squaring / addition / comparison --- heavily optimized, though still an occasional source of wins, e.g.\ a recent restructuring of the modular squaring) --- \code{src/point_add/arith/} and \code{gidney.rs},
 \code{multiply.rs}, \code{square.rs}.
 \item \textbf{Verification and scoring} --- \code{src/sim.rs} runs $0/0/0$ on the 9024 test points and counts Toffolis and peak qubits;
 \code{src/bin/eval_circuit.rs} sets the secp256k1 parameters, computes the reference point addition, and scores $\overline{\text{Toffoli}}\times$peak qubits
