@@ -60,8 +60,8 @@
 \maketitle
 
 \begin{abstract}
-This document lays out both the attack principle and the challenge background as groundwork for further writing, in two parts. \textbf{Part~I (General Principles)} explains \textbf{\emph{how} Shor's algorithm step by step breaks the
-elliptic-curve discrete logarithm (ECDLP) on secp256k1}: from the problem reduction, the algorithm's steps, and the circuit framework, to the step-by-step evolution of the quantum state and the recovery of the private key after measurement. \textbf{Part~II (Implementation)} maps this
+This document lays out both the attack principle and the challenge background as groundwork for further writing, in two parts. \textbf{Part~I (General Principles)} explains \emph{how} Shor's algorithm step by step breaks the
+elliptic-curve discrete logarithm (ECDLP) on secp256k1: from the problem reduction, the algorithm's steps, and the circuit framework, to the step-by-step evolution of the quantum state and the recovery of the private key after measurement. \textbf{Part~II (Implementation)} maps this
 general theory onto the actual secp256k1 point-add challenge\footnote{Challenge site: \url{https://www.ecdsa.fail/}.}: which part of it the challenge actually implements, what scoring and verification rules it obeys, why almost the entire cost of the attack concentrates on the \textbf{elliptic-curve point addition} and the optimization focus in turn falls \emph{chiefly} on the \textbf{modular inverse (GCD)} inside it (with the surrounding field arithmetic a secondary but still live source of gains), and which file and function each section lands in.
 To understand "why/how Shor breaks ECDLP," start with \textbf{Part~I} (\S1--\S7); to quickly align on "what this challenge is optimizing and what constraints it has,"
 read \textbf{Part~II} (\S8--\S11) directly. The two parts are mutually independent and can be used as needed.
@@ -71,7 +71,7 @@ read \textbf{Part~II} (\S8--\S11) directly. The two parts are mutually independe
 \part{General Principles: How Shor Breaks ECDLP}
 % #####################################################################
 
-This part focuses on one thing---\textbf{how Shor's algorithm turns the "classically hard problem" of recovering the private key into a computation a quantum machine can carry out efficiently}. It is an
+This part focuses on one thing---how Shor's algorithm turns the "classically hard problem" of recovering the private key into a computation a quantum machine can carry out efficiently. It is an
 as-self-contained-as-possible background overview: after reading it you should be able to \emph{derive} how the private key is computed step by step, understand each step's
 quantum state and the origin of each constructive/destructive interference, and know the exact position within the whole pipeline of the point-add primitive this challenge optimizes. As for \emph{the concrete optimization of that circuit},
 that belongs to the engineering pipeline and is not covered here.
@@ -81,7 +81,7 @@ $E/\mathbb{F}_p$ is the secp256k1 curve, $p$ its 256-bit prime field characteris
 $P$ is the base point, of prime order $r$, so the cyclic subgroup $\langle P\rangle\cong\mathbb{Z}_r$; the public key is $Q=kP$, the private key
 $k\in\{1,\dots,r-1\}$ is the attack target; $n=256$ is the scalar bit width. The two quantum input registers hold $t$ bits each (i.e.\ $t$ qubits each), $M=2^{t}\gtrsim r$ is the quantum Fourier
 transform (QFT) modulus, $\omega_M=e^{2\pi i/M}$, $\omega_r=e^{2\pi i/r}$. $\mathbb{Z}_N=\{0,\dots,N-1\}$
-denotes the residues mod $N$. (Reminder: \textbf{the public key is written $Q$, the QFT modulus is written $M$}, so the two no longer share a single letter---this is the only departure from many textbooks' notation.)
+denotes the residues mod $N$. (Reminder: the public key is written $Q$, the QFT modulus is written $M$, so the two no longer share a single letter---this is the only departure from many textbooks' notation.)
 
 % =====================================================================
 \section{Challenge Overview}
@@ -101,7 +101,7 @@ as identity. For two points $P_1=(x_1,y_1)$, $P_2=(x_2,y_2)$ (with $P_1\neq\pm P
 \label{eq:padd}
 \end{equation}
 (for point doubling $P_1=P_2$ use $\lambda=\tfrac{3x_1^2}{2y_1}$ instead, since secp256k1's $a$-coefficient is $0$). All arithmetic here is in
-$\mathbb{F}_p$; \textbf{note that \eqref{eq:padd} contains one division} $(x_2-x_1)^{-1}$---i.e.\ one \emph{modular inverse},
+$\mathbb{F}_p$; note that \eqref{eq:padd} contains one division $(x_2-x_1)^{-1}$---i.e.\ one \emph{modular inverse},
 which will be the most expensive part of the point-add circuit later (\secref{ssec:inv}).
 
 The order of the base point $P$ is a 256-bit prime $r$ (secp256k1's cofactor is $1$, so the whole curve group is $\langle P\rangle\cong\mathbb{Z}_r$).
@@ -123,7 +123,7 @@ The significance of Shor's algorithm is that a sufficiently large \emph{fault-to
 \subsection{The primitive this challenge optimizes, and the roadmap of this part}
 
 The circuit \href{https://ecdsa.fail}{ecdsa.fail} asks you to optimize is exactly the \textbf{innermost primitive} used when attacking ECDLP with Shor's algorithm:
-on a quantum superposition, \textbf{controllably and reversibly} adding a \emph{classical} point to a curve point. It is this one because the entire attack can be summarized in a single sentence:
+on a quantum superposition, controllably and reversibly adding a \emph{classical} point to a curve point. It is this one because the entire attack can be summarized in a single sentence:
 \begin{center}
 \emph{the total quantum arithmetic of the attack} $\;\approx\;$ \emph{one elliptic-curve point addition} $\;\times\;\mathcal{O}(n)$ \emph{calls}.
 \end{center}
@@ -137,12 +137,12 @@ This part then unfolds that sentence layer by layer following Shor's flow: first
 % =====================================================================
 
 This section involves no abstract framework; it settles just one concrete thing---how the number-theoretic problem "given $P$, $Q$ on the curve, find the $k$ with $Q=kP$" gets step by step
-\textbf{encoded into the preparation and measurement of a quantum state}. The whole conversion is the following four steps.
+encoded into the preparation and measurement of a quantum state. The whole conversion is the following four steps.
 
 \subsection{Step one: choose a probe function that "hides $k$ in a period"}
 
 What we know is a set of \emph{classical} data: the curve parameters ($p$, base point $P$, order $r$) and a public-key point $Q$; the unknown is $k$. Classically, this is a search in a space of size
-$r\approx2^{256}$, infeasible. The first step of the conversion is to \textbf{not solve for $k$ directly, but construct a "probe function"}:
+$r\approx2^{256}$, infeasible. The first step of the conversion is to not solve for $k$ directly, but construct a "probe function":
 \begin{equation}
 f(a,b)\;=\;aP+bQ\;=\;aP+b(kP)\;=\;(a+kb)\,P,\qquad a,b\in\mathbb{Z} .
 \label{eq:f}
@@ -153,8 +153,8 @@ $(-k,1)$ leaves the value of $f$ \emph{unchanged},
 f(a-k,\ b+1)=\bigl((a-k)+k(b+1)\bigr)P=(a+kb)\,P=f(a,b),
 \label{eq:period}
 \end{equation}
-and more generally $f(a,b)=f(a',b')\iff (a-a')+k(b-b')\equiv0\pmod r$. In other words, \textbf{the private key $k$ has been encoded as the
-"period direction / slope" $(-k,1)$ of $f$}---finding this period direction is the same as reading out $k$. At this point, "compute the discrete log" has been rewritten as "find the
+and more generally $f(a,b)=f(a',b')\iff (a-a')+k(b-b')\equiv0\pmod r$. In other words, the private key $k$ has been encoded as the
+"period direction / slope" $(-k,1)$ of $f$---finding this period direction is the same as reading out $k$. At this point, "compute the discrete log" has been rewritten as "find the
 period of a function." (Readers familiar with the abstract theory will recognize this as a two-dimensional instance of the abelian hidden subgroup problem; but the four steps below are all we need, with no need to unpack it.)
 
 \subsection{Step two: pack $a,b$ and the curve point into qubits}
@@ -169,14 +169,14 @@ Here two concepts must be kept apart: a \textbf{register} is a \emph{group of ph
 $a$ register being in the \emph{computational basis state} that "encodes the integer $a$" (it has $2^t$ basis states, one per $a\in\{0,\dots,2^t-1\}$), and $\lvert(x,y)\rangle$
 likewise means the point register encodes the point $(x,y)$. So a computational basis state $\lvert a\rangle\lvert b\rangle\lvert (x,y)\rangle$
 is nothing but three bit strings---but once the algorithm runs, these registers are usually in a \emph{superposition} of basis states (e.g.\ the $a$ register in
-$\tfrac{1}{\sqrt{2^t}}\sum_a\lvert a\rangle$), \textbf{no longer a single $\lvert a\rangle$} (the rigorous state evolution is in \secref{sec:evolve}).
+$\tfrac{1}{\sqrt{2^t}}\sum_a\lvert a\rangle$), no longer a single $\lvert a\rangle$ (the rigorous state evolution is in \secref{sec:evolve}).
 The classical probe function $f$ is then realized as a \textbf{reversible circuit} $U_f$ acting on these qubits: $\lvert a,b\rangle\lvert\mathcal{O}\rangle\mapsto
 \lvert a,b\rangle\lvert aP+bQ\rangle$ (its construction is in \secref{sec:circuit}).
 
 \subsection{Step three: turn "search for $k$" into "prepare a superposition carrying the $k$-period"}
 
-With $U_f$ in hand, the core step of the conversion is: \textbf{rather than trying $(a,b)$ one by one, first prepare all $(a,b)$ into a \emph{superposition}, then evaluate $f$
-on the whole superposition at once}.
+With $U_f$ in hand, the core step of the conversion is: rather than trying $(a,b)$ one by one, first prepare all $(a,b)$ into a \emph{superposition}, then evaluate $f$
+on the whole superposition at once.
 \begin{enumerate}[leftmargin=1.9em]
 \item Apply one layer of $H$ to each input register (each qubit becomes $\tfrac{1}{\sqrt2}(\lvert0\rangle+\lvert1\rangle)$). This $H$
 step, \emph{in one shot}, puts both registers \emph{simultaneously} into a uniform superposition over all $M^2$ basis states $\lvert a,b\rangle$ ($M=2^t$):
@@ -195,7 +195,7 @@ $M^2$ inputs at once:
 This deserves a close look, especially to clarify that the sum $\sum_{a,b}$ above is \emph{not} a classical "iteration." Here $a,b$ are each $t$ bits,
 taking values only in $\{0,\dots,M-1\}$ ($M=2^t$, \emph{finite}, not the unbounded integers), $M^2$ pairs in all. For a classical machine to actually compute $f$ at all these $M^2$ pairs $(a,b)$,
 it would have to evaluate it $M^2=2^{512}$ times \emph{one by one}---completely impossible. The quantum effect \emph{looks} the same (the values of $f$ at all $(a,b)$ are already
-obtained), \textbf{yet there is no one-by-one evaluation loop}:
+obtained), yet there is no one-by-one evaluation loop:
 \begin{itemize}[leftmargin=1.4em]
 \item \textbf{Superposition} encodes exponentially many branches into \emph{linearly} many qubits: one register of $t=256$ qubits, each passed through a single $H$ ($t$ gates in all), already generates
 a superposition of $2^{256}$ $\lvert a\rangle$'s ($H^{\otimes t}\lvert0\rangle^{\otimes t}=\tfrac{1}{\sqrt M}\sum_a\lvert a\rangle$); the two registers together use $2t$ qubits and $2t$ gates for all $M^2$ pairs. These
@@ -203,17 +203,17 @@ $M^2$ pairs $(a,b)$ are not $M^2$ independent objects but amplitudes of \emph{on
 \item \textbf{Quantum parallelism} makes \emph{one} application of $U_f$ (by linearity) act on all branches at once---one application encodes this \emph{entire lookup table}
 of "input $\mapsto aP+bQ$" into the state.
 \end{itemize}
-So the qubit count and gate count throughout are $\mathrm{poly}(t)$, \textbf{with no $2^t$ factor}: some $t$-order qubits carry the computation of $2^{512}$ branches. The exponential
+So the qubit count and gate count throughout are $\mathrm{poly}(t)$, with no $2^t$ factor: some $t$-order qubits carry the computation of $2^{512}$ branches. The exponential
 "width" exists only in the state vector and corresponds to no per-item operation---\emph{this is the fundamental difference of quantum from classical}.
 
-\textbf{But it must also be stressed: this is not a "free brute-force search."} This table \emph{cannot be read out}---one measurement collapses to a single random $(a,b)$, and all other branches are lost.
+But it must also be stressed: this is not a "free brute-force search." This table \emph{cannot be read out}---one measurement collapses to a single random $(a,b)$, and all other branches are lost.
 So quantum parallelism \emph{by itself brings no speedup}. The real power comes next, from the \textbf{interference} of the QFT, which extracts from this "already-computed but not directly readable" table, \emph{in one shot},
 a single \emph{global} property---the hidden period of $f$ (that is, the private key $k$; how the QFT singles it out is in step four and \secref{sec:evolve}). \textbf{Superposition $+$ parallelism $+$ interference}
 together are the real source of Shor's speedup over classical; parallel preparation alone is not enough.
 
 The result is an \textbf{entangled state}: the input $(a,b)$ is correlated with the point value $aP+bQ$, and by \eqref{eq:period} the whole state has $(-k,1)$ as its
 \emph{hidden period}. An essential shift has happened here---classically solving for $k$ takes about $2^{128}$ evaluations, whereas the quantum machine does \emph{one} coherent evaluation and thereby completes the computation of $f$
-on exponentially many inputs, and the periodicity of $k$ \textbf{now physically exists in the structure of this state} (the rigorous ket-by-ket evolution is in \secref{sec:evolve}).
+on exponentially many inputs, and the periodicity of $k$ now physically exists in the structure of this state (the rigorous ket-by-ket evolution is in \secref{sec:evolve}).
 The only expensive part is precisely this step's $U_f$ ($\approx2n$ point additions), i.e.\ the primitive this challenge optimizes.
 
 \subsection{Step four: use the QFT to "read out" the period}
@@ -245,7 +245,7 @@ they mean \hyperref[step:eval]{Step 2} here); this section states the operator a
 $\{0,\dots,M-1\}$ ($M=2^t$); the point register is initialized to $\lvert\mathcal{O}\rangle$.
 \item\label{step:eval} \textbf{Reversible evaluation of $f$ (this step is where all the cost lives).} Apply the unitary $U_f:\lvert a,b\rangle\lvert\mathcal{O}\rangle\mapsto
 \lvert a,b\rangle\lvert aP+bQ\rangle$---\emph{internally it is two scalar multiplications, about $2n$ controlled elliptic-curve point additions}
-(unfolded, with the primitive's location, in \secref{sec:circuit}). It \textbf{almost monopolizes} the whole machine's Toffoli and qubit budget, and is the
+(unfolded, with the primitive's location, in \secref{sec:circuit}). It almost monopolizes the whole machine's Toffoli and qubit budget, and is the
 "\hyperref[step:eval]{Step 2}" referred to repeatedly below.
 \item\label{step:qft} \textbf{Double QFT.} Apply $\mathrm{QFT}_M$ to \emph{each} of the $a$, $b$ input registers (relatively cheap, see \secref{ssec:qft}).
 \item\label{step:measure} \textbf{Measure.} Measure the two input registers, obtaining an integer pair $(c,d)\in\{0,\dots,M-1\}^2$. (The point register may or may not be measured; it does not affect the result.)
@@ -321,12 +321,12 @@ The $aP$, $bQ$ that $U_f$ must compute are both \textbf{scalar multiplications}.
 aP=\sum_{i=0}^{t-1} a_i\,(2^iP),\qquad bQ=\sum_{j=0}^{t-1} b_j\,(2^jQ),
 \label{eq:dbladd}
 \end{equation}
-where $2^iP$, $2^jQ$ are all \textbf{classical points} ($a,b$ are quantum, but $P,Q$ are known constants, so these multiples can be precomputed classically).
+where $2^iP$, $2^jQ$ are all \textbf{classical points} ($a,b$ are quantum, but $P,Q$ are known constants, so these multiples can be precomputed classically). (This is the plain \emph{non-windowed} schedule, with its $\approx2n$ additions; the state-of-the-art estimates instead merge $w$ additions into one \emph{windowed} addition, $\approx2n/w$ in all---see \secref{sec:cost}.)
 So double-and-add unfolds each scalar multiplication into a string of \emph{controlled} point additions: starting from the accumulator $\lvert\mathcal{O}\rangle$, at step $i$
 add the constant point $2^iP$ to the accumulating point when the control bit $a_i=1$, and skip when $a_i=0$. The whole $U_f$ is a cascade of about $2n$ such controlled additions
 (Figure~\ref{fig:oracle}). Each one of them,
 \begin{center}
-\emph{"controllably adding a classical point to the accumulating point on a superposition"} --- \textbf{is the primitive this challenge optimizes.}
+\emph{"controllably adding a classical point to the accumulating point on a superposition"} --- is the primitive this challenge optimizes.
 \end{center}
 It is the innermost loop, called $\mathcal{O}(n)$ times, and its internal algebra (next subsection) is where all the cost lives.
 
@@ -334,8 +334,8 @@ It is the innermost loop, called $\mathcal{O}(n)$ times, and its internal algebr
 There is \emph{no} "quantum state times a classical number" operation here---it is exactly the elliptic-curve \emph{point addition} \eqref{eq:padd} of \secref{sec:overview}.
 The accumulator register holds a curve point $R=(x_R,y_R)$ (quantum data, possibly in superposition); to add the constant point $C=2^iP=(x_C,y_C)$ (a known point already computed classically)
 and get $R+C$, the circuit follows \eqref{eq:padd} using the \emph{constants} $x_C,y_C$ and the \emph{quantum} coordinates $x_R,y_R$ in a string of reversible
-arithmetic (constant subtraction, modular inverse, modular multiplication, \dots), overwriting $R$'s coordinates \emph{in place} with those of $R+C$---\textbf{one operand a constant, the other quantum
-data}. The control shows up as: the addition happens only when $a_i=1$. As for the "quantum scalar $\times$ classical point" $aP$, it too is \emph{not} a single multiplication but exactly
+arithmetic (constant subtraction, modular inverse, modular multiplication, \dots), overwriting $R$'s coordinates \emph{in place} with those of $R+C$---one operand a constant, the other quantum
+data. The control shows up as: the addition happens only when $a_i=1$. As for the "quantum scalar $\times$ classical point" $aP$, it too is \emph{not} a single multiplication but exactly
 the accumulation of this string of controlled point additions in \eqref{eq:dbladd} (whenever $a_i=1$, add one $2^iP$)---so the innermost layer is always just \emph{point addition}, no other multiplication.
 
 \begin{figure}[h]
@@ -365,8 +365,8 @@ the accumulation of this string of controlled point additions in \eqref{eq:dblad
 \node[above,font=\footnotesize] at (7.8,1.15) {$a_{t-1}$};
 \node[above,font=\footnotesize] at (9.6,1.15) {$b_j$};
 \end{tikzpicture}
-\caption{Inside $U_f$ (schematic). The scalar multiplications $aP$, $bQ$ unfold via double-and-add into about $2n$ controlled point additions. \textbf{Every box is the \emph{same}
-point-add primitive}---when its control bit is $1$, it controllably adds a \emph{classical} point to the accumulating point; the boxes differ only in "which classical point is being added" ($2^0P,2^1P,\dots,2^jQ$),
+\caption{Inside $U_f$ (schematic). The scalar multiplications $aP$, $bQ$ unfold via double-and-add into about $2n$ controlled point additions. Every box is the \emph{same}
+point-add primitive---when its control bit is $1$, it controllably adds a \emph{classical} point to the accumulating point; the boxes differ only in "which classical point is being added" ($2^0P,2^1P,\dots,2^jQ$),
 with identical circuit structure (the $i$ in $+2^iP$ stands for any bit position).}
 \label{fig:oracle}
 \end{figure}
@@ -382,7 +382,7 @@ $\text{score}=\text{Toffoli}\times\text{qubit}$. It is expensive for two reasons
 
 \paragraph{(a) The modular inverse is inherently data-dependent, yet must be built as an "input-oblivious" fixed-shape circuit.}
 The classical algorithms for modular inverse (extended Euclid / binary GCD / Kaliski) are all \textbf{data-dependent}: the iteration count and branch decisions depend on the specific value $u$.
-But a quantum circuit is a \emph{fixed unitary}---\textbf{the circuit structure cannot depend on the (superposed) data} (no runtime \texttt{if}), and mid-circuit measurement to decide branches
+But a quantum circuit is a \emph{fixed unitary}---the circuit structure cannot depend on the (superposed) data (no runtime \texttt{if}), and mid-circuit measurement to decide branches
 would collapse the superposition. So one can only rewrite an inherently "variable-length, branching" algorithm into an \textbf{oblivious (input-oblivious), fixed-length, fixed-shape} reversible circuit:
 unfold all iterations to the worst case ($\Theta(n)$ rounds), replace \texttt{if} branches with \emph{coherent controlled swaps}, and use a fixed schedule covering all possible inputs.
 This makes the modular inverse's gate count far exceed that of the other modular operations, making it the cost center of the point-add primitive.
@@ -484,12 +484,12 @@ r, & d\equiv kc \pmod r,\\[2pt]
 \end{cases}
 \label{eq:orth}
 \end{equation}
-i.e.\ \textbf{only when $d\equiv kc$ do the $b$-terms align in phase and add constructively; otherwise they spread uniformly around the unit circle and cancel completely}. So \eqref{eq:s4} simplifies to
+i.e.\ only when $d\equiv kc$ do the $b$-terms align in phase and add constructively; otherwise they spread uniformly around the unit circle and cancel completely. So \eqref{eq:s4} simplifies to
 \begin{equation}
 \lvert\psi_4\rangle=\frac{1}{\sqrt r}\sum_{c=0}^{r-1}\omega_r^{s_0 c}\ \bigl\lvert c\bigr\rangle\,\bigl\lvert kc \bmod r\bigr\rangle .
 \label{eq:s5}
 \end{equation}
-The measured $(c,d)$ therefore \textbf{necessarily satisfies $d\equiv kc\pmod r$}---exactly the readout condition \eqref{eq:readout} previewed in step four of \secref{sec:reduce},
+The measured $(c,d)$ therefore necessarily satisfies $d\equiv kc\pmod r$---exactly the readout condition \eqref{eq:readout} previewed in step four of \secref{sec:reduce},
 now rigorously derived from interference. Each such $c$ appears with equal probability $1/r$; the phase $\omega_r^{s_0 c}$
 affects only the phase, not the probability, so the specific value of the imagined measured $s_0$ is \emph{irrelevant}---this is exactly what "no need to actually measure the point register" means.
 
@@ -511,7 +511,7 @@ probability $\Omega(1)$, within the $1/M$ neighborhood of some integer point $(\
 \label{eq:round}
 \end{equation}
 In other words, the only side effect of $M=2^t$ is to \emph{broaden} those clean integer points $(\hat c,\hat d)$ of \secref{ssec:ideal} into approximate rationals with $1/M$ jitter---requiring the next section's nearest-integer rounding
-to exactly recover $\hat c/r,\hat d/r$, resampling if necessary. (One could also take $t$ large enough that $2^t\gtrsim r^2$, making $\hat c/r$ the \emph{unique} rational with denominator $\le r$ inside the neighborhood of \eqref{eq:round}---the continued-fraction condition of the \emph{factoring} version. But that is \textbf{not needed here}: because $r$ is public in ECDLP, $t\approx n$ already suffices, as \secref{sec:period} shows.)
+to exactly recover $\hat c/r,\hat d/r$, resampling if necessary. (One could also take $t$ large enough that $2^t\gtrsim r^2$, making $\hat c/r$ the \emph{unique} rational with denominator $\le r$ inside the neighborhood of \eqref{eq:round}---the continued-fraction condition of the \emph{factoring} version. But that is not needed here: because $r$ is public in ECDLP, $t\approx n$ already suffices, as \secref{sec:period} shows.)
 
 % =====================================================================
 \section{Confirming the Period}
@@ -546,11 +546,11 @@ kP\ \stackrel{?}{=}\ Q .
 \]
 \begin{itemize}[leftmargin=1.4em]
 \item Equal $\Rightarrow$ the private key is recovered successfully, and the algorithm \textbf{terminates}. Because verification is deterministic, it never misjudges a wrong $k$ as correct.
-\item Not equal $\Rightarrow$ this sample landed on a bad point ($c\equiv 0$, or rounding recovery failed), so \textbf{go back to Step 1 of \secref{sec:steps} and resample},
+\item Not equal $\Rightarrow$ this sample landed on a bad point ($c\equiv 0$, or rounding recovery failed), so go back to Step 1 of \secref{sec:steps} and resample,
 until verification passes.
 \end{itemize}
-The probability that one quantum run gives a usable sample is a constant $\Omega(1)$ (the fraction of good $(c,d)$ times the probability $1-1/r$ that $c$ is invertible), so \textbf{only
-$\mathcal{O}(1)$ resamples are expected}. This also shows that the algorithm's expected cost is still dominated by \hyperref[step:eval]{Step 2}'s $\Theta(n)$ reversible point additions---resampling merely multiplies it
+The probability that one quantum run gives a usable sample is a constant $\Omega(1)$ (the fraction of good $(c,d)$ times the probability $1-1/r$ that $c$ is invertible), so only
+$\mathcal{O}(1)$ resamples are expected. This also shows that the algorithm's expected cost is still dominated by \hyperref[step:eval]{Step 2}'s $\Theta(n)$ reversible point additions---resampling merely multiplies it
 by a constant.
 
 \medskip
@@ -567,7 +567,7 @@ The preceding sections gave the complete mechanical flow; this section circles b
 manifest as a \emph{period} extractable by the QFT. This section introduces no new formalism and only answers "why set the problem up this way."
 
 \paragraph{How the period is "manufactured."}
-This period is not something \emph{intrinsically grown} out of $Q=kP$; rather, \textbf{we deliberately choose $f(a,b)=aP+bQ$ to manufacture it}. Look at when $f$ repeats
+This period is not something \emph{intrinsically grown} out of $Q=kP$; rather, we deliberately choose $f(a,b)=aP+bQ$ to manufacture it. Look at when $f$ repeats
 (takes the same point value):
 \[
 f(a,b)=f(a',b')\iff (a-a')P=(b'-b)\,Q\ \overset{Q=kP}{\Longleftrightarrow}\ a-a'\equiv k\,(b'-b)\pmod r.
@@ -577,7 +577,7 @@ Taking the simplest single step---incrementing $b$ by $1$ requires decrementing 
 f(a,b)=f(a-k,\;b+1).
 \]
 Why exactly $k$? Because $Q=kP$: adding one more $Q$ equals adding $k$ more $P$'s, so "$b$ takes one step" is worth "$a$ taking $k$ steps"; to keep the value unchanged,
-back $a$ off by $k$ steps. This "one step of $b$ $=$ $k$ steps of $a$" holds everywhere and repeats regularly---\textbf{the period arises thereby, and its ratio is exactly $k$}.
+back $a$ off by $k$ steps. This "one step of $b$ $=$ $k$ steps of $a$" holds everywhere and repeats regularly---the period arises thereby, and its ratio is exactly $k$.
 
 \paragraph{Aside: why this attack uses $f=aP+bQ$.}
 The point addition this challenge optimizes is precisely the inner building block computing this probe function $f(a,b)=aP+bQ$ (\secref{sec:circuit}). Taking $f$ as $aP+bQ$ is not arbitrary;
@@ -609,7 +609,7 @@ and which file / function each section of Part~I lands in. (Paths below are rela
 % =====================================================================
 
 The challenge implements only the \textbf{single point addition} primitive: given a quantum point target $(x,y)$ (qubits) and a classical point offset $(x,y)$ (classical
-bits), reversibly overwrite target \emph{in place} with the affine sum $\text{target}+\text{offset}$ (on secp256k1). It \textbf{does not include} the QFT,
+bits), reversibly overwrite target \emph{in place} with the affine sum $\text{target}+\text{offset}$ (on secp256k1). It does not include the QFT,
 measurement, the whole $aP+bQ$, and has no $a,b$ input registers---these are the \emph{algorithm layer} of Part~I ("why it is done this way"), which have no code entity here;
 what the challenge corresponds to is only the innermost \emph{single point-add step} (Part~I's Step 2, \secref{sec:circuit}).
 
@@ -657,8 +657,8 @@ of \secref{sec:gcd} cheaper---which is exactly what the competition is designed 
 
 \paragraph{First, pin down which step this score measures.}
 Back to \secref{sec:steps} and \secref{ssec:qft}: across the whole algorithm, preparing the superposition (one layer of $H$) and the two QFTs are only cheap single/two-qubit
-gates, so \textbf{almost all Toffolis come from \hyperref[step:eval]{Step 2}'s reversible evaluation $U_f$}, and the circuit's peak qubits are also reached during $U_f$ (those wide
-modular-inverse scratch registers). So the two quantities in the score---executed Toffoli count and peak qubits---\textbf{essentially measure \hyperref[step:eval]{Step 2}},
+gates, so almost all Toffolis come from \hyperref[step:eval]{Step 2}'s reversible evaluation $U_f$, and the circuit's peak qubits are also reached during $U_f$ (those wide
+modular-inverse scratch registers). So the two quantities in the score---executed Toffoli count and peak qubits---essentially measure \hyperref[step:eval]{Step 2},
 more precisely the execution cost of its innermost \textbf{point-add primitive}, called repeatedly by double-and-add. In a word: \emph{scoring the resources of the whole Shor
 attack is roughly scoring this one point-add primitive}---Steps 1 and 3 barely count.
 
@@ -666,8 +666,8 @@ attack is roughly scoring this one point-add primitive}---Steps 1 and 3 barely c
 Concretely, the scored peak is that single point-add subcircuit's own footprint: \emph{point accumulator} ($\approx2n$) $+$ \emph{modular-inverse scratch} (several $n$), reaching its high-water mark
 during the modular-inverse phase (\secref{ssec:inv}), and \textbf{excluding} the two $2n$ input registers (they belong to the \emph{outer} double-and-add loop, and do not enter a \emph{single} point
 addition). So it is a strict \emph{subset} of the machinery counted in the $2330$ of \secref{ssec:qubits}---magnitude $\sim 4.5n$ (currently measured at a frontier peak of $\approx 1150$
-qubits), \emph{not} "$2330$ minus the input registers." Because the score is $\overline{\text{Toffoli}}\times$peak qubits, \textbf{every qubit reclaimed in the modular inverse directly lowers
-the score}, exactly as it lowers the Toffoli factor---which is why \secref{sec:gcd} treats the modular inverse as the joint cost center of both factors.
+qubits), \emph{not} "$2330$ minus the input registers." Because the score is $\overline{\text{Toffoli}}\times$peak qubits, every qubit reclaimed in the modular inverse directly lowers
+the score, exactly as it lowers the Toffoli factor---which is why \secref{sec:gcd} treats the modular inverse as the joint cost center of both factors.
 
 \paragraph{So why measure it as "the two multiplied together"?}
 Because this product is a clean proxy for the \textbf{space--time volume of fault-tolerant quantum computing (FTQC)}, and space--time volume is the real
@@ -684,13 +684,20 @@ real cost and engineering effort.
 \end{itemize}
 
 Now layer on the amplification effect stressed repeatedly here: point addition is called $\Theta(n)$ ($n=256$) times in one complete Shor attack (the
-double-and-add of \eqref{eq:dbladd}), so \textbf{any constant-factor reduction on a single point addition multiplies by several hundred along the whole algorithm}. The number industry really cares about---"how big a fault-tolerant machine
+double-and-add of \eqref{eq:dbladd}), so any constant-factor reduction on a single point addition multiplies by several hundred along the whole algorithm. The number industry really cares about---"how big a fault-tolerant machine
 and how many hours it takes to break secp256k1 with a quantum computer"---is proportional to this amplified space--time volume; pressing down the point addition's
-$\text{Toffoli}\times\text{qubit}$ is equivalent to \emph{directly revising down} this threat estimate. And this estimate is precisely the quantitative basis for the NIST post-quantum
-standardization process and for the ECDSA-deprecation timelines in finance / blockchain / TLS and other industries.
+$\text{Toffoli}\times\text{qubit}$ is equivalent to \emph{directly revising down} this threat estimate.
 
-\medskip
-And within this space--time volume to be minimized, \emph{which part} has the most optimization room? The answer is highly concentrated---the next section explains.
+\paragraph{The full-attack cost, concretely.}
+The state-of-the-art resource estimates\footnote{Google Quantum AI et al.\ (2026), \url{https://arxiv.org/abs/2603.28846}; the windowing accounting and \eqref{eq:fullcost} are its Appendix~A, Eq.~(A1), p.~55. (Exact citation to confirm.) See also D.~Litinski, \emph{How to compute a 256-bit elliptic curve private key with only 50 million Toffoli gates} (2023), \url{https://arxiv.org/abs/2306.08585}, for a clear exposition of this windowing accounting.} use \emph{windowed} additions rather than the plain double-and-add of \eqref{eq:dbladd}: $w$ consecutive additions are merged into one, at the cost of a size-$2^{w}$ table lookup ($3\cdot2^{w}$ Toffoli) with the added point selected coherently from a precomputed table. The total non-Clifford (Toffoli) cost of the whole $n$-bit ECDLP circuit is then
+\begin{equation}
+\mathrm{ECDLP}^{\mathrm{Toff}}_n=\bigl(\mathrm{PA}^{\mathrm{Toff}}_n+3\cdot2^{w}\bigr)\Bigl(\tfrac{2n}{w}-4\Bigr),
+\label{eq:fullcost}
+\end{equation}
+where $\mathrm{PA}^{\mathrm{Toff}}_n$ is the Toffoli count of one point-addition core (the quantity this challenge optimizes) and the $-4$ absorbs two standard end-of-schedule savings (replacing the first windowed addition by a direct lookup, and skipping the last three by classical post-processing). For $n=256$, $w=16$ this is $28\times(3\cdot2^{16}+\mathrm{PA}^{\mathrm{Toff}}_{256})$, with $2n/w-4=32-4=28$ windowed additions. So lowering the scored per-addition cost feeds \emph{directly} into this full-attack total. (Reconciling the challenge's classical-offset primitive with the windowed, coherently-selected point---and the apples-to-apples comparison against those estimates---is carried out in the companion writeup, not here.)
+
+And this estimate is precisely the quantitative basis for the NIST post-quantum
+standardization process and for the ECDSA-deprecation timelines in finance / blockchain / TLS and other industries.
 
 % =====================================================================
 \section{Why the main battlefield of optimization is the GCD (modular inverse)}
@@ -699,35 +706,35 @@ And within this space--time volume to be minimized, \emph{which part} has the mo
 
 The previous section explained \emph{what to press}---the space--time volume $\text{Toffoli}\times\text{qubit}$; this section explains \emph{where to press}. The answer is highly
 concentrated: the \textbf{modular inverse} inside point addition, i.e.\ the step computed by binary GCD / Kaliski (\secref{ssec:inv}). One might say
-\textbf{much of the optimization history of this circuit has been the optimization history of the modular inverse (GCD)}---though, as noted below, the surrounding field arithmetic still yields wins too. There are four reasons the GCD dominates, and they compound:
+much of the optimization history of this circuit has been the optimization history of the modular inverse (GCD)---though, as noted below, the surrounding field arithmetic still yields wins too. There are four reasons the GCD dominates, and they compound:
 
 \paragraph{(1) It is the only iterative big-cost component in point addition.}
 In one point addition (\eqref{eq:padd}), addition / subtraction / multiplication / squaring are all \emph{branch-free, single-pass} circuits with fixed structure, and the adder (Gidney-style) and
 schoolbook / Karatsuba multiplication are already heavily optimized (though \emph{not} provably minimal---the field arithmetic still yields the occasional win, see the end of the section). Only the modular inverse has \emph{no} single-pass algorithm; it can only iterate GCD for
 $\Theta(n)$ (about $256$--$512$) rounds, each round a compare $+$ conditional subtract $+$ shift. One multiplication is one pass, GCD is $n$ passes---so
-\textbf{the Toffolis of a single point addition come mainly from the GCD loop body}.
+the Toffolis of a single point addition come mainly from the GCD loop body.
 
 \paragraph{(2) It maxes out both factors of the score at once.}
 The score is a \emph{product} $\text{Toffoli}\times\text{qubit}$, so the component that can lower both factors yields the most, and the GCD occupies both:
 \begin{itemize}[leftmargin=1.4em]
 \item \textbf{Toffoli axis}: $\Theta(n)$ rounds $\times$ the comparator / conditional subtraction per round, the bulk of the point addition's gate count.
-\item \textbf{Qubit axis}: Kaliski must maintain several $n$-bit state registers ($u,v,r,s$ and the like) plus scratch at once, and \textbf{the peak width of the whole
-circuit is often reached during the GCD phase}.
+\item \textbf{Qubit axis}: Kaliski must maintain several $n$-bit state registers ($u,v,r,s$ and the like) plus scratch at once, and the peak width of the whole
+circuit is often reached during the GCD phase.
 \end{itemize}
 Other components usually improve only one factor; the GCD is one of the few that \emph{affects both factors at once}, with the largest marginal gain on the product.
 
 \paragraph{(3) Reversibility doubles it, double-and-add amplifies it.}
 The scratch produced by the modular inverse must be uncomputed to zero (the second Kaliski pass, \secref{ssec:inv}), so saving one share on the GCD actually saves two;
 and the modular inverse is called once per point addition, and point addition is called $\Theta(n)$ times by double-and-add (\eqref{eq:dbladd}), so any constant
-factor pressed down here \textbf{multiplies by several hundred along the whole algorithm}. Savings on other components are additive; savings on the GCD are multiplicative.
+factor pressed down here multiplies by several hundred along the whole algorithm. Savings on other components are additive; savings on the GCD are multiplicative.
 
 \paragraph{(4) It has the most algorithmic freedom left.}
 The adder / multiplication / squaring are structurally fixed single-pass circuits, already close to their practical limits---so the place in one point addition where the \emph{biggest} trade-offs remain---\emph{which modular-inverse
 algorithm to choose and how to organize its iterations}---is concentrated in the GCD, which is still an open design problem. This does not mean the field arithmetic is frozen: it is heavily optimized but not provably minimal, and recent frontier moves have still come from restructuring it---for instance, rewriting the modular \emph{squaring} from an AND-based schoolbook form into a controlled add--subtract (roughly halving the Toffolis per cross product) delivered a few-percent score improvement without touching the GCD. But such wins are the exception; the largest and most reliable leverage is still the modular inverse, and focusing on it is not a preference but what the circuit structure dictates.
 
 \medskip
-In a word: minimizing $\text{Toffoli}\times\text{qubit}$ is, to first order, reducing the cost of the modular inverse---the GCD is the \textbf{largest cost
-center, the amplifier, and the richest locus of algorithmic freedom} of a single point addition, with the surrounding field arithmetic a secondary lever. This is also why, on this circuit, most advances that push cost to a new low ultimately trace back to the same place:
+In a word: minimizing $\text{Toffoli}\times\text{qubit}$ is, to first order, reducing the cost of the modular inverse---the GCD is the largest cost
+center, the amplifier, and the richest locus of algorithmic freedom of a single point addition, with the surrounding field arithmetic a secondary lever. This is also why, on this circuit, most advances that push cost to a new low ultimately trace back to the same place:
 lowering the cost of that one modular-inverse step.
 
 % =====================================================================
